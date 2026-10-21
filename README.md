@@ -1,4 +1,4 @@
-# gameservers-k3s
+# SunCore Server Hosting (k3s)
 
 Modular game server hosting on a single machine, running on [k3s](https://k3s.io).
 Every game server is described by Kubernetes manifests, so you can start it, stop it,
@@ -71,8 +71,8 @@ sudo systemctl reload NetworkManager
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/OWNER/gameservers-k3s.git
-cd gameservers-k3s
+git clone https://github.com/Pakqot/suncore-k3s-game-server.git
+cd suncore-k3s-game-server
 ```
 
 ### 3. Create the namespace and the secret
