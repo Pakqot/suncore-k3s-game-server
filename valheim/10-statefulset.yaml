@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: valheim-main
+  namespace: valheim
+  labels:
+    gameserver: "true"       # labels the Telegram bot will use to discover servers
+    game: valheim
+    instance: main
+spec:
+  replicas: 1                # 1 = server running, 0 = server stopped
+  serviceName: valheim-main-status   # required field; the matching Service will be a separate file
+  selector:
+    matchLabels:             # labels the StatefulSet uses to find its own pods
+      game: valheim
+      instance: main
+  template:                  # pod template: what exactly to run
+    metadata:
+      labels:                # must include every label from the selector above; extra labels are allowed
+        gameserver: "true"
+        game: valheim
+        instance: main
+    spec:
+      terminationGracePeriodSeconds: 120   # time to save the world on shutdown
+      containers:
+        - name: valheim
+          image: ghcr.io/community-valheim-tools/valheim-server:1.4.0  # pinned image version; the game server itself updates from Steam on every container start
+          securityContext:
+            capabilities:
+              add: ["SYS_NICE"]            # lets the server raise its process priority (recommended by the image README)
+          env:
+            - name: SERVER_NAME
+              value: "ValheimSuncoreServer"
+            - name: SERVER_PASS          # read from the Kubernetes Secret valheim-main
+              valueFrom:
+                secretKeyRef:
+                  name: valheim-main
+                  key: SERVER_PASS
+            - name: TZ
+              value: "Europe/Kyiv"
+            - name: WORLD_NAME
+              value: "SuncoreWorld"      # world name, must not contain the password
+            - name: SERVER_PUBLIC
+              value: "true"              # "true" = listed in the server browser (will be switched by the Telegram bot)
+            - name: STATUS_HTTP
+              value: "true"              # enables /status.json (off by default)
+            - name: UPDATE_CRON
+              value: ""                  # empty = no self-updates while running
+            - name: RESTART_CRON
+              value: ""                  # empty = no scheduled nightly restart
+            - name: BACKUPS
+              value: "false"             # built-in backups off, our own backups come later
+          ports:
+            - containerPort: 2456
+              hostPort: 2456
+              protocol: UDP              # without this line the port would be TCP
+            - containerPort: 2457
+              hostPort: 2457
+              protocol: UDP
+            - containerPort: 2458
+              hostPort: 2458
+              protocol: UDP
+          volumeMounts:
+            - name: config               # name from volumeClaimTemplates below
+              mountPath: /config
+            - name: server
+              mountPath: /opt/valheim
+          resources:
+            requests:
+              memory: 3Gi
+              cpu: "1"
+            limits:
+              memory: 5Gi                # no CPU limit on purpose: it causes throttling and lag
+          startupProbe:                  # allows up to 15 minutes (10 s x 90) for download and world generation
+            httpGet:
+              path: /status.json
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 90
+  volumeClaimTemplates:      # disk templates: Kubernetes creates one volume per pod from each
+    - metadata:
+        name: config
+      spec:
+        accessModes: ["ReadWriteOnce"]   # the volume attaches to a single node
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: server
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
